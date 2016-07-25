@@ -1,0 +1,6 @@
+{
+    "username": "YOUR_SKYPE_USERNAME",
+    "password": "YOUR_SKYPE_PASSWORD",
+    "url": "http://YOUR_MOTION_DOMAIN/api/openchannel/accounts/OPENCHANNEL_INTEGRATION_ID/receive",
+    "port": 3001
+}
