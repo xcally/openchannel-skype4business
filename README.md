@@ -14,6 +14,7 @@ xCALLY Motion provides all the necessary tools to receive and send messages. All
 ## Setting up the app
   * Set the open channel [Account on Motion](https://wiki.xcallymotion.com/display/XMD/Open+Channel)
   * Download the code `git clone https://github.com/xcally/openchannel-skype.git`
+  * Please see `config.json` in the root folder to change the default application settings.
   * Run `npm install` at the root folder to download dependencies.
   * Run `node index.js` to start the application.
 
@@ -29,6 +30,10 @@ Please see `config.json` in the root folder if you want to change the default ap
     "port": 3001
 }
 ```
+
+## Contribution & support
+
+Want to contribute? Great! Just create a pull request and you're in - welcome!
 
 ## Troubleshooting
 
