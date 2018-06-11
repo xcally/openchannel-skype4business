@@ -26,9 +26,9 @@ app.listen(port, function() {
   logger.info('Service listening on port ' + port);
 });
   
-app.get('/', function(req, res) {
-  res.sendFile(__dirname + '/index.html');
-});
+//app.get('/', function(req, res) {
+//  res.sendFile(__dirname + '/index.html');
+//});
   
 //bodyParser to get POST parameters
 app.use(bodyParser.urlencoded({
@@ -64,12 +64,6 @@ var tableName = 'botdata';
 var azureTableClient = new botbuilder_azure.AzureTableClient(tableName, process.env['AzureWebJobsStorage']);
 var tableStorage = new botbuilder_azure.AzureBotStorage({ gzipData: false }, azureTableClient);
 
-//var inMemoryStorage = new builder.MemoryBotStorage();
-
-// Create your bot with a function to receive messages from the user
-// var bot = new builder.UniversalBot(connector);
-// bot.set('storage', tableStorage);
-
 var address = null;
 
 var bot = new builder.UniversalBot(connector, function (session) {
@@ -95,7 +89,7 @@ var bot = new builder.UniversalBot(connector, function (session) {
   } catch (e) {
     logger.error(JSON.stringify(e));
   }
-}).set('storage', inMemoryStorage);
+}).set('storage', tableStorage);
 
 function sendData(data){
     return request({
