@@ -19,10 +19,7 @@ try {
   process.exit(1);
 }
 
-var port = process.env.port || process.env.PORT || 3003;
-
-logger.info('process.env.port: %s', process.env.port);
-logger.info('process.env.PORT: %s', process.env.PORT); 
+var port = config.port || 3003;
 
 //Start server
 app.listen(port, function() {
@@ -50,8 +47,8 @@ app.use(morgan('VERBOSE [:datetime] [REQUEST] [OPENCHANNEL-SKYPE4BUSINESS] - :me
 
 // Create chat connector for communicating with the Bot Framework Service
 var connector = new builder.ChatConnector({
-  appId: process.env.MicrosoftAppId,
-  appPassword: process.env.MicrosoftAppPassword
+  appId: config.microsoft_app_id,
+  appPassword: config.microsoft_app_password
 });
 
 // Listen for messages from users 
@@ -67,7 +64,7 @@ var tableName = 'botdata';
 var azureTableClient = new botbuilder_azure.AzureTableClient(tableName, process.env['AzureWebJobsStorage']);
 var tableStorage = new botbuilder_azure.AzureBotStorage({ gzipData: false }, azureTableClient);
 
-var inMemoryStorage = new builder.MemoryBotStorage();
+//var inMemoryStorage = new builder.MemoryBotStorage();
 
 // Create your bot with a function to receive messages from the user
 // var bot = new builder.UniversalBot(connector);
@@ -130,11 +127,7 @@ app.post('/sendMessage', function(req, res) {
 function sendProactiveMessage(message) {
     var msg = new builder.Message().address(address);
     msg.text(message);
-    
-    logger.info('address', address);
-    logger.info('message', message);
-    logger.info('msg', msg);
-    
+
     bot.send(msg, function(err){
       if(err) logger.error(err);
     });
