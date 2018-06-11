@@ -1,4 +1,4 @@
-# Skype integration for your Motion Openchannel in Node.js
+# Skype For Business integration for your Motion Openchannel in Node.js
 
 ## Overview
 
@@ -13,7 +13,7 @@ xCALLY Motion provides all the necessary tools to receive and send messages. All
 
 ## Setting up the app
   * Set the open channel [Account on Motion](https://wiki.xcallymotion.com/display/XMD/Open+Channel)
-  * Download the code `git clone https://github.com/xcally/openchannel-skype.git`
+  * Download the code `git clone https://github.com/xcally/openchannel-skype4business.git`
   * Please see `config.json` in the root folder to change the default application settings.
   * Run `npm install` at the root folder to download dependencies.
   * Run `node index.js` to start the application.
@@ -24,10 +24,10 @@ Please see `config.json` in the root folder if you want to change the default ap
 
 ```javascript
 {
-    "username": "YOUR_SKYPE_USERNAME",
-    "password": "YOUR_SKYPE_PASSWORD",
+    "microsoft_app_id": "YOUR_MICROSOFT_APP_ID",
+    "microsoft_app_password": "YOUR_MICROSOFT_APP_PASSWORD",
     "url": "http://YOUR_MOTION_DOMAIN/api/openchannel/accounts/OPENCHANNEL_INTEGRATION_ID/receive",
-    "port": 3001
+    "port": 3003
 }
 ```
 
@@ -37,17 +37,6 @@ Want to contribute? Great! Just create a pull request and you're in - welcome!
 
 ## Troubleshooting
 
-* Account HTTP Method or URL is not configured
-
-Please check to have configured correctly the ["Send" web hook](https://wiki.xcallymotion.com/display/XMD/Open+Channel#OpenChannel-WebHooks)
-
-* Error: connection refused ECONNREFUSED
-
-Please check if the nodejs application is up!
-
-* [SkypeAPI] [FATAL] authToken failure
-
-Please check, in the config.json file, that username and password are correct.
 
 ## Enjoy
 
