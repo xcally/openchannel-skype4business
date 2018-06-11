@@ -1,31 +1,36 @@
 {
-  "name": "openchannel-skype",
+  "name": "openchannel-skyper4business",
   "version": "1.0.0",
-  "description": "xCALLY Motion Openchannel-Skype integration",
+  "description": "xCALLY Motion Openchannel-Skype For Business integration",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xcally/openchannel-skype.git"
+    "url": "git+https://github.com/xcally/openchannel-skyper4business.git"
   },
   "keywords": [
     "xcally",
     "motion",
     "openchannel",
-    "skype"
+    "skyper4business"
   ],
   "author": "xcally",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/xcally/openchannel-skype/issues"
+    "url": "https://github.com/xcally/openchannel-skype4business/issues"
   },
-  "homepage": "https://github.com/xcally/openchannel-skype#readme",
+  "homepage": "https://github.com/xcally/openchannel-skype4business#readme",
   "dependencies": {
     "body-parser": "^1.15.2",
+    "botbuilder": "^3.14.1",
+    "botbuilder-azure": "^3.1.0",
     "express": "^4.14.0",
-    "request-promise": "^4.0.2",
-    "skypeapi": "^0.2.4"
+    "lodash": "^4.17.4",
+    "moment": "^2.18.1",
+    "morgan": "^1.8.2",
+    "request-promise": "^4.2.2",
+    "winston": "^2.3.1"
   }
 }
