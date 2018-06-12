@@ -5,7 +5,7 @@ var path = require('path');
 var _ = require('lodash');
 
 function filename(service, level) {
-  return path.join('./var/log/xcally', util.format('%s-%s.log', service, level));
+  return path.join('/var/log/xcally', util.format('%s-%s.log', service, level));
 }
 
 function formatter(service, options) {
