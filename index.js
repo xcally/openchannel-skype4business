@@ -26,10 +26,6 @@ app.listen(port, function() {
   logger.info('Service listening on port ' + port);
 });
   
-//app.get('/', function(req, res) {
-//  res.sendFile(__dirname + '/index.html');
-//});
-  
 //bodyParser to get POST parameters
 app.use(bodyParser.urlencoded({
   extended: false
@@ -54,17 +50,8 @@ var connector = new builder.ChatConnector({
 // Listen for messages from users 
 app.post('/api/messages', connector.listen());
 
-/*----------------------------------------------------------------------------------------
-* Bot Storage: This is a great spot to register the private state storage for your bot. 
-* We provide adapters for Azure Table, CosmosDb, SQL Azure, or you can implement your own!
-* For samples and documentation, see: https://github.com/Microsoft/BotBuilder-Azure
-* ---------------------------------------------------------------------------------------- */
-
-var tableName = 'botdata';
-var azureTableClient = new botbuilder_azure.AzureTableClient(tableName, process.env['AzureWebJobsStorage']);
-var tableStorage = new botbuilder_azure.AzureBotStorage({ gzipData: false }, azureTableClient);
-
 var address = null;
+var inMemoryStorage = new builder.MemoryBotStorage();
 
 var bot = new builder.UniversalBot(connector, function (session) {
   try {
@@ -89,7 +76,7 @@ var bot = new builder.UniversalBot(connector, function (session) {
   } catch (e) {
     logger.error(JSON.stringify(e));
   }
-}).set('storage', tableStorage);
+}).set('storage', inMemoryStorage);
 
 function sendData(data){
     return request({
