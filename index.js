@@ -52,7 +52,7 @@ var connector = new builder.ChatConnector({
 });
 
 // Listen for messages from users 
-app.post('/receiveMessage', connector.listen());
+app.post('/api/messages', connector.listen());
 
 /*----------------------------------------------------------------------------------------
 * Bot Storage: This is a great spot to register the private state storage for your bot. 
