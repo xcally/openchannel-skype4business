@@ -66,8 +66,8 @@ var bot = new builder.UniversalBot(connector, function (session) {
           from: session.message.address.user.id,
           body: session.message.text,
           firstName: session.message.address.user.name,
-          phone: session.message.address.user.id,
-          mapKey: 'phone'
+          skype: session.message.address.user.id,
+          mapKey: 'skype'
         };
 
         return sendData(data);
