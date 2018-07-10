@@ -27,7 +27,11 @@ Please see `config.json` in the root folder if you want to change the default ap
     "microsoft_app_id": "YOUR_MICROSOFT_APP_ID",
     "microsoft_app_password": "YOUR_MICROSOFT_APP_PASSWORD",
     "url": "http://YOUR_MOTION_DOMAIN/api/openchannel/accounts/OPENCHANNEL_INTEGRATION_ID/receive",
-    "port": 3003
+    "port": 3003,
+    "auth" : {
+        "username": "YOUR_SKYPE4BUSINESS_USERNAME",
+        "password": "YOUR_SKYPE4BUSINESS_PASSWORD"
+      }
 }
 ```
 
