@@ -2,7 +2,7 @@ var express = require('express'),
   builder = require('botbuilder'),
   bodyParser = require('body-parser'),
   request = require('request-promise'),
-  fs = require('fs'),
+  fs = require('fs-extra'),
   logger = require('./logger.js')('openchannel-skype4business'),
   moment = require('moment'),
   url = require('url'),
@@ -13,7 +13,7 @@ var express = require('express'),
 
 var app = express();
 
-// Configuration
+// Retrieve the configuration
 try {
   var configJSON = fs.readFileSync(__dirname + '/config.json');
   var config = JSON.parse(configJSON.toString());
@@ -34,7 +34,7 @@ if (MOTION_URL) {
 var APPLICATION_ID = config.microsoft_app_id;
 // Microsoft Application Password
 var APPLICATION_PASSWORD = config.microsoft_app_password;
-// Credentials of the SkypeForBusiness user
+// Credentials for Motion authentication
 var USERNAME = config.auth.username;
 var PASSWORD = config.auth.password;
 
@@ -43,12 +43,34 @@ if (!(APPLICATION_ID && APPLICATION_PASSWORD && MOTION_URL && DOMAIN && USERNAME
   process.exit(1);
 }
 
-//Start server
+// Create the temporary file that will store the conversations' address info
+fs.ensureFile(__dirname + '/tmp/conversations_history.json')
+.then(function() {
+  fs.readJson(__dirname + '/tmp/conversations_history.json')
+  .catch(function() {
+    // Initialization of empty array
+    var data = {
+      conversations:[]
+    }
+    fs.writeJson(__dirname + '/tmp/conversations_history.json', data)
+    .then(function() {
+      logger.log('Temporary conversations history file created!')
+    })
+    .catch(function(err) {
+      logger.error(err)
+    })
+  })
+})
+.catch(function(err) {
+  logger.error('An error occured while creating the temporary conversations history file', err)
+})
+
+// Start the server
 app.listen(PORT, function() {
   logger.info('Service listening on port ' + PORT);
 });
   
-//bodyParser to get POST parameters
+// bodyParser to get POST parameters
 app.use(bodyParser.urlencoded({
   extended: false
 }));
@@ -72,7 +94,6 @@ var connector = new builder.ChatConnector({
 // Listen for messages from users 
 app.post('/api/messages', connector.listen());
 
-var address = null;
 var inMemoryStorage = new builder.MemoryBotStorage();
 
 // Initialization of UniversalBot 
@@ -80,12 +101,13 @@ var bot = new builder.UniversalBot(connector, function(session) {
   try {
     if (session && session.message && session.message.type === "message") {
       var msg = session.message;
-      address = msg.address;
-      session.userData.savedAddress = address;
+      var address = msg.address;
+
+      updateConversationsHistory(address);
 
       // Plain text message
       if (msg.textFormat === "plain") {
-        return sendDataToMotion(address.user.id, address.user.name, msg.text, null);
+        return sendDataToMotion(address.user.id, address.user.name, msg.text, null, address.conversation.id);
       }
 
       // Message with attachment
@@ -96,8 +118,8 @@ var bot = new builder.UniversalBot(connector, function(session) {
         var originalFilename = attachment.name;
         var w = fs.createWriteStream(__dirname + '/' + tempName);
 
-        // Download attachment
-        // Skype & MS Teams attachment URLs are secured by a JwtToken, so we need to pass the token from our bot.
+        // Download the attachment
+        // Skype & MS Teams attachment URLs are secured by a JwtToken, so we need to pass the token from our bot
         var fileDownload = checkRequiresToken(msg)
             ? requestWithToken(attachment.contentUrl)
             : request(attachment.contentUrl);
@@ -109,8 +131,10 @@ var bot = new builder.UniversalBot(connector, function(session) {
           logger.error(errorMessage);
           logger.error(err);
           // Send a message to Motion to warn that an error occured in sending the message
-          return sendDataToMotion(address.user.id, address.user.name, errorMessage, null);
-
+          sendDataToMotion(address.user.id, address.user.name, errorMessage, null, address.conversation.id);
+          return res.status(500).send({
+            message: errorMessage
+          });
         })
         
         w.on('finish', function(){
@@ -137,13 +161,16 @@ var bot = new builder.UniversalBot(connector, function(session) {
             if(!attachment) {
               throw new Error('Unable to get uploaded attachment id!');
             }
-            return sendDataToMotion(address.user.id, address.user.name, originalFilename, attachment.id);
+            return sendDataToMotion(address.user.id, address.user.name, originalFilename, attachment.id, address.conversation.id);
           })
           .catch(function(err) {
             var errorMessage = 'Error uploading attachment to xCALLY Motion server';
             logger.error(errorMessage, err);
             deleteTempFile(__dirname + '/' + tempName);
-            return sendDataToMotion(address.user.id, address.user.name, errorMessage, null);
+            sendDataToMotion(address.user.id, address.user.name, errorMessage, null, address.conversation.id);
+            return res.status(500).send({
+              message: errorMessage
+            });
           })
         });
       }
@@ -153,8 +180,8 @@ var bot = new builder.UniversalBot(connector, function(session) {
   }
 }).set("storage", inMemoryStorage);
 
-//Send the message to Motion 
-function sendDataToMotion(senderId, senderName, content, attachmentId){
+// Send the message to Motion 
+function sendDataToMotion(senderId, senderName, content, attachmentId, conversationId){
     return request({
       method: 'POST',
       uri: config.url,
@@ -164,7 +191,8 @@ function sendDataToMotion(senderId, senderName, content, attachmentId){
         body: content,
         skype: senderId,
         AttachmentId: attachmentId,
-        mapKey: "skype"
+        mapKey: "skype",
+        threadId: conversationId
       },
       json: true
     })
@@ -175,20 +203,33 @@ function sendDataToMotion(senderId, senderName, content, attachmentId){
       logger.error(JSON.stringify(err));
     });
 };
-
+ 
 app.post('/sendMessage', function(req, res) {
   logger.info('Sending a message to SkypeForBusiness', req.body);
-  if (address) {
+  var conversation = req.body.Interaction;
+
+  var address = getConversationAddressSync(conversation.threadId);
+  if(address){
     if(!req.body.body){
       return res.status(500).send({
         message: 'The body of the message cannot be null'
       });
     }
-    return sendDataToSkype(req.body, res);
-  };
+    return sendDataToSkype(address, req.body, res);
+  }
+  else {
+    errorMessage = 'Cannot send the message. The conversation might have been deleted.';
+    logger.info('Conversation not found', conversation);
+    // Send a message to Motion to warn that an error occured in sending the message
+    sendDataToMotion(conversation.UserId, conversation.from, errorMessage, null, conversation.threadId);
+    return res.status(500).send({
+      message: errorMessage
+    });
+  }
 });
 
-function sendDataToSkype(data, res) {
+// Send message to SkypeForBusiness
+function sendDataToSkype(address, data, res) {
   var message = new builder.Message().address(address);
 
   if(data.AttachmentId){
@@ -204,6 +245,7 @@ function sendDataToSkype(data, res) {
     var filename = moment().unix() + fileExtension;
     var w = fs.createWriteStream(__dirname + '/' + filename);
 
+    // Retrieve the attachment from Motion
     request({
       uri: DOMAIN + '/api/attachments/' + data.AttachmentId + '/download',
       method: 'GET',
@@ -274,10 +316,10 @@ var requestWithToken = function (url) {
 var obtainToken = Promise.promisify(connector.getAccessToken.bind(connector));
 
 var checkRequiresToken = function (message) {
-  return message.source === 'skype' || message.source === 'msteams';
+  return message.source === 'skypeforbusiness';
 };
 
-//Delete the temporary file stored locally
+// Delete the temporary file stored locally
 function deleteTempFile(path) {
   fs.unlink(path, function(err) {
     if (err) {
@@ -287,3 +329,43 @@ function deleteTempFile(path) {
     }
   });
 };
+
+// Update the temporary conversation history file
+function updateConversationsHistory(address) {
+  fs.readJson(__dirname + '/tmp/conversations_history.json')
+  .then(function(historyJSON) {
+    var exists = false;
+    // Check if the current conversationId has already been stored
+    for(var i = 0; i < historyJSON.conversations.length; i++) {
+        if (historyJSON.conversations[i].conversation.id == address.conversation.id) {
+          exists = true;
+            break;
+        }
+    }
+  
+    if(!exists){
+      // Add the conversation address
+      historyJSON.conversations.push(address);
+      fs.writeJson(__dirname + '/tmp/conversations_history.json', historyJSON)
+      .then(function() {
+        logger.log('Temporary conversations history file updated!')
+      })
+      .catch(function(err) {
+        logger.error(err)
+      })
+    }
+  })
+  .catch(function(err) {
+    logger.error(err)
+  })
+};
+
+// Retrieve the conversation address
+function getConversationAddressSync(addressId) {
+  var historyJSON = fs.readJsonSync(__dirname + '/tmp/conversations_history.json')
+  for(var i = 0; i < historyJSON.conversations.length; i++) {
+    if (historyJSON.conversations[i].conversation.id == addressId) {
+      return historyJSON.conversations[i];
+    }
+  }
+}
