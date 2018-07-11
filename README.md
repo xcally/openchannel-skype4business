@@ -29,8 +29,8 @@ Please see `config.json` in the root folder if you want to change the default ap
     "url": "http://YOUR_MOTION_DOMAIN/api/openchannel/accounts/OPENCHANNEL_INTEGRATION_ID/receive",
     "port": 3003,
     "auth" : {
-        "username": "YOUR_SKYPE4BUSINESS_USERNAME",
-        "password": "YOUR_SKYPE4BUSINESS_PASSWORD"
+        "username": "YOUR_MOTION_USERNAME",
+        "password": "YOUR_MOTION_PASSWORD"
       }
 }
 ```
