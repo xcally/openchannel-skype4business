@@ -137,7 +137,7 @@ function sendDataToMotion(senderId, senderName, content, attachmentId, conversat
 
 app.post('/sendMessage', function (req, res) {
   logger.info('Sending a message to SkypeForBusiness', req.body);
-
+  var conversation = req.body.Interaction;
   var address = getConversationAddress(conversation.threadId);
   if (address) {
     if (!req.body.body) {
