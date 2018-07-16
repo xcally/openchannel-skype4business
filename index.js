@@ -32,28 +32,6 @@ if (!(APPLICATION_ID && APPLICATION_PASSWORD && MOTION_URL)) {
   process.exit(1);
 }
 
-// Create the temporary file that will store the conversations' address info
-fs.ensureFile(__dirname + '/tmp/conversations_history.json')
-  .then(function () {
-    fs.readJson(__dirname + '/tmp/conversations_history.json')
-      .catch(function () {
-        // Initialization of empty array
-        var data = {
-          conversations: []
-        }
-        fs.writeJson(__dirname + '/tmp/conversations_history.json', data)
-          .then(function () {
-            logger.log('Temporary conversations history file created!')
-          })
-          .catch(function (err) {
-            logger.error(err)
-          })
-      })
-  })
-  .catch(function (err) {
-    logger.error('An error occured while creating the temporary conversations history file', err)
-  })
-
 // Start the server
 app.listen(PORT, function () {
   logger.info('Service listening on port ' + PORT);
@@ -88,19 +66,21 @@ app.get('/status', function (req, res) {
 app.post('/api/messages', connector.listen());
 
 var inMemoryStorage = new builder.MemoryBotStorage();
+var address = null;
 
 // Initialization of UniversalBot 
 var bot = new builder.UniversalBot(connector, function (session) {
   try {
     if (session && session.message && session.message.type === "message") {
       var msg = session.message;
-      var address = msg.address;
-
-      updateConversationsHistory(address);
+      address = msg.address;
 
       // Plain text message
       if (msg.textFormat === "plain") {
-        return sendDataToMotion(address.user.id, address.user.name, msg.text, null, address.conversation.id);
+        // Check if the message was supposed to be an attachment
+        if (!msg.text.startsWith("Application-Name: File Transfer")) {
+          return sendDataToMotion(address.user.id, address.user.name, msg.text, null, address.conversation.id);
+        }
       }
     }
   } catch (e) {
@@ -134,9 +114,6 @@ function sendDataToMotion(senderId, senderName, content, attachmentId, conversat
 
 app.post('/sendMessage', function (req, res) {
   logger.info('Sending a message to SkypeForBusiness', req.body);
-  var conversation = req.body.Interaction;
-
-  var address = getConversationAddress(conversation.threadId);
   if (address) {
     if (!req.body.body) {
       return res.status(500).send({
@@ -145,10 +122,7 @@ app.post('/sendMessage', function (req, res) {
     }
     return sendDataToSkype(address, req.body, res);
   } else {
-    errorMessage = 'Cannot send the message. The conversation might have been deleted.';
-    logger.info('Conversation not found', conversation);
-    // Send a message to Motion to warn that an error occured in sending the message
-    sendDataToMotion(conversation.UserId, conversation.from, errorMessage, null, conversation.threadId);
+    errorMessage = 'Cannot send the message. The conversation might have been closed or deleted.';
     return res.status(500).send({
       message: errorMessage
     });
@@ -160,8 +134,6 @@ function sendDataToSkype(address, data, res) {
   var message = new builder.Message().address(address);
   if (data.AttachmentId) {
     var warningMessage = 'Attachments are not supported';
-    // Send a message to Motion to warn that attachments are not supported
-    sendDataToMotion(conversation.UserId, conversation.from, warningMessage, null, conversation.threadId);
     return res.status(501).send({
       message: warningMessage
     });
@@ -177,44 +149,3 @@ function sendDataToSkype(address, data, res) {
     });
   }
 };
-
-// Helpers  
-// Update the temporary conversation history file
-function updateConversationsHistory(address) {
-  fs.readJson(__dirname + '/tmp/conversations_history.json')
-    .then(function (historyJSON) {
-      var exists = false;
-      // Check if the current conversationId has already been stored
-      for (var i = 0; i < historyJSON.conversations.length; i++) {
-        if (historyJSON.conversations[i].conversation.id == address.conversation.id) {
-          exists = true;
-          break;
-        }
-      }
-
-      if (!exists) {
-        // Add the conversation address
-        historyJSON.conversations.push(address);
-        fs.writeJson(__dirname + '/tmp/conversations_history.json', historyJSON)
-          .then(function () {
-            logger.log('Temporary conversations history file updated!')
-          })
-          .catch(function (err) {
-            logger.error(err)
-          })
-      }
-    })
-    .catch(function (err) {
-      logger.error(err)
-    })
-};
-
-// Retrieve the conversation address
-function getConversationAddress(addressId) {
-  var historyJSON = fs.readJsonSync(__dirname + '/tmp/conversations_history.json')
-  for (var i = 0; i < historyJSON.conversations.length; i++) {
-    if (historyJSON.conversations[i].conversation.id == addressId) {
-      return historyJSON.conversations[i];
-    }
-  }
-}
