@@ -3,7 +3,7 @@ var express = require('express'),
   bodyParser = require('body-parser'),
   request = require('request-promise'),
   fs = require('fs-extra'),
-  logger = require('./logger.js')('openchannel-msteams'),
+  logger = require('./logger.js')('openchannel-skype4business'),
   moment = require('moment'),
   url = require('url'),
   path = require('path'),
@@ -30,12 +30,15 @@ if (MOTION_URL) {
   var DOMAIN = myUrl.protocol + '//' + myUrl.host;
 }
 
+var USERNAME = config.auth.username;
+var PASSWORD = config.auth.password;
+
 // Microsoft Application Id
 var APPLICATION_ID = config.microsoft_app_id;
 // Microsoft Application Password
 var APPLICATION_PASSWORD = config.microsoft_app_password;
 
-if (!(APPLICATION_ID && APPLICATION_PASSWORD && MOTION_URL)) {
+if (!(APPLICATION_ID && APPLICATION_PASSWORD && MOTION_URL && USERNAME && PASSWORD)) {
   logger.error('Missing configuration values');
   process.exit(1);
 }
@@ -91,7 +94,7 @@ morgan.token('datetime', function (req, res) {
   return moment().format('YYYY-MM-DD HH:mm:ss');
 });
 
-app.use(morgan('VERBOSE [:datetime] [REQUEST] [OPENCHANNEL-MSTEAMS] - :method :remote-address :remote-user :url :status :response-time ms - :res[content-length]'));
+app.use(morgan('VERBOSE [:datetime] [REQUEST] [OPENCHANNEL-SKYPE4BUSINESS] - :method :remote-address :remote-user :url :status :response-time ms - :res[content-length]'));
 
 // Create chat connector for communicating with the Bot Framework Service
 var connector = new builder.ChatConnector({
