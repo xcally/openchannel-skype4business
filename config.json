@@ -4,7 +4,7 @@
     "url": "http://YOUR_MOTION_DOMAIN/api/openchannel/accounts/OPENCHANNEL_INTEGRATION_ID/receive",
     "port": 3003,
     "auth" : {
-    "username": "MOTION_ADMIN_USERNAME",
-    "password": "MOTION_ADMIN_PASSWORD"
-  }
+        "username": "MOTION_ADMIN_USERNAME",
+        "password": "MOTION_ADMIN_PASSWORD"
+    }
 }
