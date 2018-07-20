@@ -3,9 +3,13 @@ var express = require('express'),
   bodyParser = require('body-parser'),
   request = require('request-promise'),
   fs = require('fs-extra'),
-  logger = require('./logger.js')('openchannel-skype4business'),
+  logger = require('./logger.js')('openchannel-msteams'),
   moment = require('moment'),
-  morgan = require('morgan');
+  url = require('url'),
+  path = require('path'),
+  morgan = require('morgan'),
+  Promise = require('bluebird'),
+  mime = require('mime-types');
 
 var app = express();
 
@@ -21,6 +25,10 @@ try {
 var PORT = config.port || 3003;
 // URL that can be retrieved from the Motion OpenChannel Account
 var MOTION_URL = config.url;
+if (MOTION_URL) {
+  var myUrl = url.parse(MOTION_URL);
+  var DOMAIN = myUrl.protocol + '//' + myUrl.host;
+}
 
 // Microsoft Application Id
 var APPLICATION_ID = config.microsoft_app_id;
@@ -28,13 +36,24 @@ var APPLICATION_ID = config.microsoft_app_id;
 var APPLICATION_PASSWORD = config.microsoft_app_password;
 
 if (!(APPLICATION_ID && APPLICATION_PASSWORD && MOTION_URL)) {
-  logger.error("Missing configuration values");
+  logger.error('Missing configuration values');
   process.exit(1);
 }
+
+var tempDirPath = '/tmp/attachments/';
 
 // Create the temporary file that will store the conversations' address info
 fs.ensureFile(__dirname + '/tmp/conversations_history.json')
   .then(function () {
+    // Create the temporary directory that will store the attachments sent from Motion
+    fs.ensureDir(__dirname + tempDirPath)
+      .then(() => {
+        logger.log('Temporary attachments folder created!')
+      })
+      .catch(err => {
+        logger.error('An error occured while creating the temporary attachments folder', err)
+      })
+
     fs.readJson(__dirname + '/tmp/conversations_history.json')
       .catch(function () {
         // Initialization of empty array
@@ -46,14 +65,14 @@ fs.ensureFile(__dirname + '/tmp/conversations_history.json')
             logger.log('Temporary conversations history file created!')
           })
           .catch(function (err) {
-            logger.error(err)
+            logger.error('Cannot write to the temporary conversations history file', err)
           })
       })
   })
   .catch(function (err) {
     logger.error('An error occured while creating the temporary conversations history file', err)
   })
-  
+
 // Start the server
 app.listen(PORT, function () {
   logger.info('Service listening on port ' + PORT);
@@ -72,7 +91,7 @@ morgan.token('datetime', function (req, res) {
   return moment().format('YYYY-MM-DD HH:mm:ss');
 });
 
-app.use(morgan('VERBOSE [:datetime] [REQUEST] [OPENCHANNEL-SKYPE4BUSINESS] - :method :remote-address :remote-user :url :status :response-time ms - :res[content-length]'));
+app.use(morgan('VERBOSE [:datetime] [REQUEST] [OPENCHANNEL-MSTEAMS] - :method :remote-address :remote-user :url :status :response-time ms - :res[content-length]'));
 
 // Create chat connector for communicating with the Bot Framework Service
 var connector = new builder.ChatConnector({
@@ -92,24 +111,86 @@ var inMemoryStorage = new builder.MemoryBotStorage();
 // Initialization of UniversalBot 
 var bot = new builder.UniversalBot(connector, function (session) {
   try {
-    if (session && session.message && session.message.type === "message") {
+    if (session && session.message && session.message.type === 'message') {
       var msg = session.message;
       var address = msg.address;
 
       updateConversationsHistory(address);
 
       // Plain text message
-      if (msg.textFormat === "plain") {
-        // Check if the message was supposed to be an attachment
-        if (!msg.text.startsWith("Application-Name: File Transfer")) {
-          return sendDataToMotion(address.user.id, address.user.name, msg.text, null, address.conversation.id);
-        }
+      if (msg.textFormat === 'plain') {
+        return sendDataToMotion(address.user.id, address.user.name, msg.text, null, address.conversation.id);
+      }
+
+      // Message with attachment
+      if (msg.attachments && msg.attachments.length > 0) {
+        var attachment = msg.attachments[0];
+        var myUrl = url.parse(attachment.contentUrl);
+        var tempName = moment().unix() + path.extname(myUrl.pathname);
+        var originalFilename = attachment.name;
+        var w = fs.createWriteStream(__dirname + tempDirPath + tempName);
+
+        // Download the attachment
+        // MS Teams attachment URLs are secured by a JwtToken, so we need to pass the token from our bot
+        var fileDownload = checkRequiresToken(msg) ?
+          requestWithToken(attachment.contentUrl) :
+          request(attachment.contentUrl);
+
+        fileDownload
+          .pipe(w)
+          .on('error', function (err) {
+            var errorMessage = 'Error getting attachment from Teams';
+            logger.error(errorMessage);
+            logger.error(err);
+            // Send a message to Motion to warn that an error occured in sending the message
+            sendDataToMotion(address.user.id, address.user.name, errorMessage, null, address.conversation.id);
+            return res.status(500).send({
+              message: errorMessage
+            });
+          })
+
+        w.on('finish', function () {
+          var uploadOptions = {
+            method: 'POST',
+            uri: DOMAIN + '/api/attachments',
+            auth: {
+              user: USERNAME,
+              pass: PASSWORD
+            },
+            formData: {
+              file: {
+                value: fs.createReadStream(__dirname + tempDirPath + tempName),
+                options: {
+                  filename: originalFilename
+                }
+              }
+            },
+            json: true
+          };
+
+          return request(uploadOptions)
+            .then(function (attachment) {
+              if (!attachment) {
+                throw new Error('Unable to get uploaded attachment id!');
+              }
+              return sendDataToMotion(address.user.id, address.user.name, originalFilename, attachment.id, address.conversation.id);
+            })
+            .catch(function (err) {
+              var errorMessage = 'Error uploading attachment to xCALLY Motion server';
+              logger.error(errorMessage, err);
+              deleteTempFile(__dirname + tempDirPath + tempName);
+              sendDataToMotion(address.user.id, address.user.name, errorMessage, null, address.conversation.id);
+              return res.status(500).send({
+                message: errorMessage
+              });
+            })
+        });
       }
     }
   } catch (e) {
     logger.error(JSON.stringify(e));
   }
-}).set("storage", inMemoryStorage);
+}).set('storage', inMemoryStorage);
 
 // Send the message to Motion 
 function sendDataToMotion(senderId, senderName, content, attachmentId, conversationId) {
@@ -122,7 +203,7 @@ function sendDataToMotion(senderId, senderName, content, attachmentId, conversat
         body: content,
         skype: senderId,
         AttachmentId: attachmentId,
-        mapKey: "skype",
+        mapKey: 'skype',
         threadId: conversationId
       },
       json: true
@@ -136,7 +217,7 @@ function sendDataToMotion(senderId, senderName, content, attachmentId, conversat
 };
 
 app.post('/sendMessage', function (req, res) {
-  logger.info('Sending a message to SkypeForBusiness', req.body);
+  logger.info('Sending a message to Teams', req.body);
   var conversation = req.body.Interaction;
   var address = getConversationAddress(conversation.threadId);
   if (address) {
@@ -145,7 +226,7 @@ app.post('/sendMessage', function (req, res) {
         message: 'The body of the message cannot be null'
       });
     }
-    return sendDataToSkype(address, req.body, res);
+    return sendDataToTeams(address, req.body, res);
   } else {
     errorMessage = 'Cannot send the message. The conversation might have been closed or deleted.';
     return res.status(500).send({
@@ -154,14 +235,59 @@ app.post('/sendMessage', function (req, res) {
   }
 });
 
-// Send message to SkypeForBusiness
-function sendDataToSkype(address, data, res) {
+// Send message to Teams
+function sendDataToTeams(address, data, res) {
   var message = new builder.Message().address(address);
   if (data.AttachmentId) {
-    var warningMessage = 'Attachments are not supported';
-    return res.status(501).send({
-      message: warningMessage
-    });
+    if (!data.body) {
+      var errorMessage = 'Unable to retrieve the attachment\'s name';
+      logger.error(errorMessage)
+      return res.status(500).send({
+        message: errorMessage
+      })
+    }
+
+    var fileExtension = path.extname(data.body);
+    var filename = moment().unix() + fileExtension;
+    var w = fs.createWriteStream(__dirname + tempDirPath + filename);
+
+    // Retrieve the attachment from Motion
+    request({
+        uri: DOMAIN + '/api/attachments/' + data.AttachmentId + '/download',
+        method: 'GET',
+        auth: {
+          user: USERNAME,
+          pass: PASSWORD
+        }
+      })
+      .on('error', function (err) {
+        logger.error('An error occurred while retrieving the attachment from the Motion server' +
+          'Cannot send the message to %s', to)
+        logger.error(err);
+        return res.status(500).send(err);
+      })
+      .pipe(w);
+
+    w.on('finish', function () {
+      var attachment = {
+        contentUrl: __dirname + '/' + filename,
+        contentType: mime.lookup(fileExtension)
+      }
+      message.addAttachment(attachment);
+      message.text(data.body);
+
+      bot.send(message, function (err) {
+        if (err) {
+          logger.error(err);
+          res.status(500).send(err);
+        } else {
+          if (filename) {
+            deleteTempFile(__dirname + tempDirPath + filename);
+          }
+          res.status(200).send('ok');
+        }
+      });
+    })
   } else {
     message.text(data.body);
     bot.send(message, function (err) {
@@ -175,7 +301,27 @@ function sendDataToSkype(address, data, res) {
   }
 };
 
-// Helpers  
+// Helper methods
+// Request file with Authentication Header
+var requestWithToken = function (url) {
+  return obtainToken().then(function (token) {
+    return request({
+      url: url,
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/octet-stream'
+      }
+    });
+  });
+};
+
+// Promise for obtaining JWT Token (requested once)
+var obtainToken = Promise.promisify(connector.getAccessToken.bind(connector));
+
+var checkRequiresToken = function (message) {
+  return message.source === 'msteams';
+};
+
 // Update the temporary conversation history file
 function updateConversationsHistory(address) {
   fs.readJson(__dirname + '/tmp/conversations_history.json')
@@ -215,3 +361,14 @@ function getConversationAddress(addressId) {
     }
   }
 }
+
+// Delete the temporary file stored locally
+function deleteTempFile(path) {
+  fs.unlink(path, function (err) {
+    if (err) {
+      logger.error('Unable to delete the temporary file', err);
+    } else {
+      logger.debug('Temporary file correctly deleted!');
+    }
+  });
+};
