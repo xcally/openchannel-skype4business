@@ -3,6 +3,8 @@
     "microsoft_app_password": "YOUR_MICROSOFT_APP_PASSWORD",
     "url": "http://YOUR_MOTION_DOMAIN/api/openchannel/accounts/OPENCHANNEL_INTEGRATION_ID/receive",
     "port": 3003,
+    "proxy_token": "PROXY_TOKEN (OPTIONAL)",
+    "proxy_url": "PROXY_DOMAIN (OPTIONAL)",
     "auth" : {
         "username": "MOTION_ADMIN_USERNAME",
         "password": "MOTION_ADMIN_PASSWORD"
